@@ -26,9 +26,6 @@ github.com/golang/protobuf/ptypes/timestamp
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e
 ## explicit
-# github.com/oklog/run v1.1.0
-## explicit
-github.com/oklog/run
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
