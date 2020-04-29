@@ -12,10 +12,10 @@ Once the http server which serves the metrics is up, mwatch calls the watch targ
 Main mwatch uses pool.New to keep the scraped metrics in a buffer. You could customise this to append to the buffer and add them to a data store for further analysis. You could also use the buffer to analyse and provide statistics on concept drift if required.
 
 Compilation and Installation
-git clone https://github.com/samuel-sujith/mwatch
-cd mwatch
-go mod tidy
-go install ./mwatch/main.go
+->git clone https://github.com/samuel-sujith/mwatch
+->cd mwatch
+->go mod tidy
+->go install ./mwatch/main.go
 
 Running the watcher
 -> With default parameters
