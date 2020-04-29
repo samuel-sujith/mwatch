@@ -3,92 +3,62 @@ package watch
 import (
 	"bufio"
 	"compress/gzip"
-	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
-	"sync"
-	"time"
 
-	"github.com/pkg/errors"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/common/version"
-	"k8s.io/apimachinery/pkg/labels"
+	"github.com/samuel-sujith/mwatch/pkg/types"
 )
 
 const acceptHeader = `application/openmetrics-text; version=0.0.1,text/plain;version=0.0.4;q=0.5,*/*;q=0.1`
 
 var userAgentHeader = fmt.Sprintf("Prometheus/%s", version.Version)
 
-// Target refers to a singular HTTP or HTTPS endpoint.
-type Target struct {
-	// Labels before any processing.
-	discoveredLabels labels.Labels
-	// Any labels that are added to this target and its metrics.
-	labels labels.Labels
-	// Additional URL parameters that are part of the target URL.
-	params url.Values
+//Targetwatching watches the given listenaddress and returns the http get response
+func Targetwatching(cfg types.Cfg, w io.Writer, logger log.Logger) (string, error) {
 
-	mtx                sync.RWMutex
-	lastError          error
-	lastScrape         time.Time
-	lastScrapeDuration time.Duration
-	health             TargetHealth
-	metadata           MetricMetadataStore
-}
-
-//TargetScraper implements the scraper interface for a target.
-type TargetScraper struct {
-	*Target
-
-	client  *http.Client
-	req     *http.Request
-	timeout time.Duration
-
-	gzipr *gzip.Reader
-	buf   *bufio.Reader
-}
-
-//Createtargetscraper takes in the target specified and returns a scraper which can then be used
-//to scrape the metrics off the target endpoint
-func Createtargetscraper(target Target) *TargetScraper {
+	var gzipr *gzip.Reader
+	var buf *bufio.Reader
 	//TODO
-	ts := TargetScraper{
-		//Fill up details
-		client:,
-	}
-	return &ts
-}
+	loggertarget := log.With(logger, "component", "targetwatcher")
+	client := &http.Client{}
 
-func (s *targetScraper) scrape(ctx context.Context, w io.Writer) (string, error) {
-	if s.req == nil {
-		req, err := http.NewRequest("GET", s.URL().String(), nil)
-		if err != nil {
-			return "", err
-		}
-		req.Header.Add("Accept", acceptHeader)
-		req.Header.Add("Accept-Encoding", "gzip")
-		req.Header.Set("User-Agent", userAgentHeader)
-		req.Header.Set("X-Prometheus-Scrape-Timeout-Seconds", fmt.Sprintf("%f", s.timeout.Seconds()))
+	level.Info(loggertarget).Log("msg", "Sending GET request to scraper", "listenaddress", cfg.Listenaddress)
+	//fmt.Println("The address received in watcher is ", cfg.Listenaddress)
 
-		s.req = req
-	}
-
-	resp, err := s.client.Do(s.req.WithContext(ctx))
+	req, err := http.NewRequest("GET", cfg.Listenaddress, nil)
 	if err != nil {
 		return "", err
 	}
+	req.Header.Add("Accept", acceptHeader)
+	req.Header.Add("Accept-Encoding", "gzip")
+	req.Header.Set("User-Agent", userAgentHeader)
+	req.Header.Set("X-Prometheus-Scrape-Timeout-Seconds", "5.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+
+	level.Info(loggertarget).Log("msg", "Sent GET request to scraper")
+	//fmt.Println("Response from server is ", resp)
+
 	defer func() {
 		io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()
 	}()
 
-	if resp.StatusCode != http.StatusOK {
+	/*if resp.StatusCode != http.StatusOK {
 		return "", errors.Errorf("server returned HTTP status %s", resp.Status)
-	}
+	}*/
 
 	if resp.Header.Get("Content-Encoding") != "gzip" {
+		level.Info(loggertarget).Log("msg", "Encoding is not Zip")
+		//fmt.Println("response is ", resp.Body)
 		_, err = io.Copy(w, resp.Body)
 		if err != nil {
 			return "", err
@@ -96,23 +66,26 @@ func (s *targetScraper) scrape(ctx context.Context, w io.Writer) (string, error)
 		return resp.Header.Get("Content-Type"), nil
 	}
 
-	if s.gzipr == nil {
-		s.buf = bufio.NewReader(resp.Body)
-		s.gzipr, err = gzip.NewReader(s.buf)
+	if gzipr == nil {
+		//fmt.Println("Entered gzipr area")
+		buf = bufio.NewReader(resp.Body)
+		gzipr, err = gzip.NewReader(buf)
 		if err != nil {
 			return "", err
 		}
 	} else {
-		s.buf.Reset(resp.Body)
-		if err = s.gzipr.Reset(s.buf); err != nil {
+		buf.Reset(resp.Body)
+		if err = gzipr.Reset(buf); err != nil {
 			return "", err
 		}
 	}
 
-	_, err = io.Copy(w, s.gzipr)
-	s.gzipr.Close()
+	_, err = io.Copy(w, gzipr)
+	gzipr.Close()
 	if err != nil {
 		return "", err
 	}
+
 	return resp.Header.Get("Content-Type"), nil
+
 }

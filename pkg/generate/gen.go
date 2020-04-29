@@ -22,7 +22,6 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -71,11 +70,13 @@ func init() {
 //Runmetrics runs the test metrics generator which will be scraped by the scraper in the watch package
 //Runmetrics is called in the main.go in the main mwatch package
 func Runmetrics(ch chan bool) {
+
+	//fmt.Println("Came to runmetrics")
 	flag.Parse()
 
 	start := time.Now()
-	var wg sync.WaitGroup
-	wg.Add(3)
+	//var wg sync.WaitGroup
+	//wg.Add(3)
 
 	oscillationFactor := func() float64 {
 		return 2 + math.Sin(math.Sin(2*math.Pi*float64(time.Since(start))/float64(*oscillationPeriod)))
@@ -83,8 +84,10 @@ func Runmetrics(ch chan bool) {
 
 	// Periodically record some sample latencies for the three services.
 	go func() {
-		defer wg.Done()
+		//fmt.Println("go metric func 1")
+		//defer wg.Done()
 		for {
+			//fmt.Println("go metric  in func 1")
 			v := rand.Float64() * *uniformDomain
 			rpcDurations.WithLabelValues("uniform").Observe(v)
 			time.Sleep(time.Duration(100*oscillationFactor()) * time.Millisecond)
@@ -92,8 +95,10 @@ func Runmetrics(ch chan bool) {
 	}()
 
 	go func() {
-		defer wg.Done()
+		//fmt.Println("go metric func 2")
+		//defer wg.Done()
 		for {
+			//fmt.Println("go metric  in func 2")
 			v := (rand.NormFloat64() * *normDomain) + *normMean
 			rpcDurations.WithLabelValues("normal").Observe(v)
 			// Demonstrate exemplar support with a dummy ID. This
@@ -110,14 +115,20 @@ func Runmetrics(ch chan bool) {
 	}()
 
 	go func() {
-		defer wg.Done()
+		//fmt.Println("go metric func 3")
+		//defer wg.Done()
 		for {
+			//fmt.Println("go metric  in func 3")
 			v := rand.ExpFloat64() / 1e6
 			rpcDurations.WithLabelValues("exponential").Observe(v)
 			time.Sleep(time.Duration(50*oscillationFactor()) * time.Millisecond)
 		}
 	}()
-	wg.Wait()
+	//wg.Wait()
+
+	//fmt.Println("Exposing on /metrics")
+	close(ch)
+	//fmt.Println("sent true to channel")
 
 	// Expose the registered metrics via HTTP.
 	http.Handle("/metrics", promhttp.HandlerFor(
@@ -127,7 +138,8 @@ func Runmetrics(ch chan bool) {
 			EnableOpenMetrics: true,
 		},
 	))
-	ch <- true
+
 	log.Fatal(http.ListenAndServe(*addr, nil))
+
 
 }
