@@ -20,7 +20,7 @@ Compilation and Installation
 Running the watcher
 -> With default parameters
 main.exe
--> WIth custom endpoint
+-> With custom endpoint
 main.exe --listenaddress=<customendpoint>
 
 Please post issues in case of any assistance.

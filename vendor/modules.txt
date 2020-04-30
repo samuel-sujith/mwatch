@@ -2,10 +2,12 @@
 github.com/alecthomas/template
 github.com/alecthomas/template/parse
 # github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d
-## explicit
 github.com/alecthomas/units
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
+# github.com/buger/jsonparser v0.0.0-20200322175846-f7e751efca13
+## explicit
+github.com/buger/jsonparser
 # github.com/cespare/xxhash/v2 v2.1.1
 github.com/cespare/xxhash/v2
 # github.com/go-kit/kit v0.10.0
@@ -23,6 +25,7 @@ github.com/golang/protobuf/ptypes/timestamp
 # github.com/kr/text v0.2.0
 ## explicit
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
+## explicit
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e
 ## explicit
@@ -35,6 +38,7 @@ github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/internal
 github.com/prometheus/client_golang/prometheus/promhttp
 # github.com/prometheus/client_model v0.2.0
+## explicit
 github.com/prometheus/client_model/go
 # github.com/prometheus/common v0.9.1
 ## explicit
@@ -46,9 +50,11 @@ github.com/prometheus/common/version
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
+# github.com/prometheus/prom2json v1.3.0
+## explicit
+github.com/prometheus/prom2json
 # github.com/prometheus/prometheus v2.5.0+incompatible
 ## explicit
-github.com/prometheus/prometheus/pkg/pool
 # github.com/stretchr/testify v1.5.1
 ## explicit
 # golang.org/x/sys v0.0.0-20200427175716-29b57079015a

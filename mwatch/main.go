@@ -17,8 +17,9 @@ package main
 
 //
 import (
-	"bytes"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -26,10 +27,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/pool"
 	"github.com/samuel-sujith/mwatch/pkg/generate"
 	"github.com/samuel-sujith/mwatch/pkg/types"
-	"github.com/samuel-sujith/mwatch/pkg/watch"
+
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/prom2json"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -39,11 +41,17 @@ import (
 
 func main() {
 
-	configuration := types.Cfg{Listenaddress: "a dummy address"}
+	configuration := types.Cfg{Listenaddress: "a dummy address", DesiredMetric: "a dummy metric"}
+	var cert, key string
+	var skipServerCertCheck bool
 
 	a := kingpin.New(filepath.Base(os.Args[0]), "The Model metric watcher")
 
 	a.Flag("listenaddress", "Model watcher address to watch.").Default("http://localhost:8080/metrics").StringVar(&configuration.Listenaddress)
+	a.Flag("desired_metric", "Desired metric to watch out for").Default("process_open_fds").StringVar(&configuration.DesiredMetric)
+	a.Flag("cert", "certificate file for client.").Default("").StringVar(&cert)
+	a.Flag("key", "key for certificate file for client.").Default("").StringVar(&key)
+	a.Flag("accept-invalid-cert", "Skipping cert check").Default("true").BoolVar(&skipServerCertCheck)
 
 	_, err := a.Parse(os.Args[1:])
 	if err != nil {
@@ -52,12 +60,9 @@ func main() {
 		os.Exit(2)
 	}
 
-	/*conf, err := config.Loadfile(configuration.configfile)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "couldn't load configuration (--config.file=%q)", configuration.configfile))
-	}*/
-
 	ch := make(chan bool)
+	mfChan := make(chan *dto.MetricFamily, 1024)
+
 	//buf := &bytes.Buffer{}
 	w := log.NewSyncWriter(os.Stderr)
 	logger := log.NewLogfmtLogger(w)
@@ -67,16 +72,16 @@ func main() {
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
 
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 
 	go generate.Runmetrics(ch)
 
 	<-ch
 
 	level.Info(logger).Log("msg", "Generated metrics")
-	buffers := pool.New(1e3, 1e6, 3, func(sz int) interface{} { return make([]byte, 0, sz) })
-	b := buffers.Get(1024).([]byte)
-	buf := bytes.NewBuffer(b)
+	//buffers := pool.New(1e3, 1e6, 3, func(sz int) interface{} { return make([]byte, 0, sz) })
+	//b := buffers.Get(1024).([]byte)
+	//buf := bytes.NewBuffer(b)
 	//fmt.Println("configuration is ", configuration)
 mainLoop:
 	for {
@@ -86,7 +91,7 @@ mainLoop:
 			level.Info(logger).Log("msg", "exiting due to interrupt")
 			break mainLoop
 		case <-ticker.C:
-			contenttype, watcherr := watch.Targetwatching(configuration, buf, logger)
+			/*contenttype, watcherr := watch.Targetwatching(configuration, buf, logger)
 			if watcherr == nil {
 				b = buf.Bytes()
 				level.Info(logger).Log("msg", "nil response from watcher", "ctype", contenttype)
@@ -98,11 +103,73 @@ mainLoop:
 			if watcherr != nil {
 				//fmt.Println("There is error in watching the metrics", watcherr)
 				level.Error(logger).Log("msg", "err in target watching", "err", err)
-			}
+			}*/
 			//TODO
-			buffers.Put(b)
+			transport, err := makeTransport(cert, key, skipServerCertCheck)
+			if err != nil {
+				level.Error(logger).Log("msg", "unable to make transport", "error", err)
+			}
+			if err := prom2json.FetchMetricFamilies(configuration.Listenaddress, mfChan, transport); err != nil {
+				level.Error(logger).Log("msg", "Error parsing response", "error", err)
+			}
+			result := []*prom2json.Family{}
+			for mf := range mfChan {
+				result = append(result, prom2json.NewFamily(mf))
+				if *mf.Name == configuration.DesiredMetric {
+					level.Info(logger).Log("msg", "Your desired metric is", "metric", configuration.DesiredMetric, "value", getValue(mf.Metric[0]))
+				}
+
+			}
+
+			/*jsonText, err := json.Marshal(result)
+			if err != nil {
+				level.Error(logger).Log("msg", "Error marshaling json", "error", err)
+			}
+			if _, err := os.Stdout.Write(jsonText); err != nil {
+				level.Error(logger).Log("msg", "Error writing to stdout", "error", err)
+			}*/
+
+			mfChan = make(chan *dto.MetricFamily, 1024)
+
 		}
 	}
 	//fmt.Println("put into the buffer")
 	level.Info(logger).Log("msg", "See you next time!")
+}
+
+func makeTransport(
+	certificate string, key string,
+	skipServerCertCheck bool,
+) (*http.Transport, error) {
+	// Start with the DefaultTransport for sane defaults.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	// Conservatively disable HTTP keep-alives as this program will only
+	// ever need a single HTTP request.
+	transport.DisableKeepAlives = true
+	// Timeout early if the server doesn't even return the headers.
+	transport.ResponseHeaderTimeout = time.Minute
+	tlsConfig := &tls.Config{InsecureSkipVerify: skipServerCertCheck}
+	if certificate != "" && key != "" {
+		cert, err := tls.LoadX509KeyPair(certificate, key)
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+		tlsConfig.BuildNameToCertificate()
+	}
+	transport.TLSClientConfig = tlsConfig
+	return transport, nil
+}
+
+func getValue(m *dto.Metric) float64 {
+	switch {
+	case m.Gauge != nil:
+		return m.GetGauge().GetValue()
+	case m.Counter != nil:
+		return m.GetCounter().GetValue()
+	case m.Untyped != nil:
+		return m.GetUntyped().GetValue()
+	default:
+		return 0.
+	}
 }
