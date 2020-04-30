@@ -7,7 +7,6 @@ github.com/alecthomas/units
 github.com/beorn7/perks/quantile
 # github.com/buger/jsonparser v0.0.0-20200322175846-f7e751efca13
 ## explicit
-github.com/buger/jsonparser
 # github.com/cespare/xxhash/v2 v2.1.1
 github.com/cespare/xxhash/v2
 # github.com/go-kit/kit v0.10.0
