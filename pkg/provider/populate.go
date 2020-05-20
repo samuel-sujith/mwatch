@@ -35,7 +35,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 )
 
-func (p *testingProvider) populatemetrics(intconf types.Interimconfig, cfg types.Cfg) {
+func (p *testingProvider) populatemetrics(intconf types.Interimconfig) {
 
 	mfChan := make(chan *dto.MetricFamily, 1024)
 
@@ -44,7 +44,7 @@ func (p *testingProvider) populatemetrics(intconf types.Interimconfig, cfg types
 	if err != nil {
 		level.Error(intconf.Logger).Log("msg", "unable to make transport", "error", err)
 	}
-	if err := prom2json.FetchMetricFamilies(cfg.Listenaddress, mfChan, transport); err != nil {
+	if err := prom2json.FetchMetricFamilies(intconf.Configuration.Listenaddress, mfChan, transport); err != nil {
 		level.Error(intconf.Logger).Log("msg", "Error parsing response", "error", err)
 	}
 	for mf := range mfChan {
@@ -52,7 +52,7 @@ func (p *testingProvider) populatemetrics(intconf types.Interimconfig, cfg types
 		for i, m := range mf.Metric {
 			switch mf.GetType() {
 			case dto.MetricType_SUMMARY:
-				level.Info(intconf.Logger).Log("msg", "Discarding summary metric", "metricname", *mf.Name)
+				//level.Info(intconf.Logger).Log("msg", "Discarding summary metric", "metricname", *mf.Name)
 				/*summaryvalues := prom2json.Summary{}
 				summaryvalues = (result.Metrics[i]).(prom2json.Summary)
 				fmt.Println("summary", summaryvalues.Labels)
@@ -71,7 +71,7 @@ func (p *testingProvider) populatemetrics(intconf types.Interimconfig, cfg types
 				fmt.Println("number is ", m.GetSummary().GetSampleSum())
 				fmt.Println("count is ", m.GetSummary().GetSampleCount())*/
 			case dto.MetricType_HISTOGRAM:
-				level.Info(intconf.Logger).Log("msg", "Discarding histogram metric", "metricname", *mf.Name)
+				//level.Info(intconf.Logger).Log("msg", "Discarding histogram metric", "metricname", *mf.Name)
 				/*histvalues := prom2json.Histogram{}
 				histvalues = (result.Metrics[i]).(prom2json.Histogram)
 				/*fmt.Println(histvalues.Labels)
@@ -93,8 +93,8 @@ func (p *testingProvider) populatemetrics(intconf types.Interimconfig, cfg types
 			default:
 				metricvalues := prom2json.Metric{}
 				metricvalues = (result.Metrics[i]).(prom2json.Metric)
-				level.Info(intconf.Logger).Log("msg", "Populating counter/gauge metric", "metricname", *mf.Name)
-				fmt.Println("metric", metricvalues.Labels)
+				//level.Info(intconf.Logger).Log("msg", "Populating counter/gauge metric", "metricname", *mf.Name)
+				//fmt.Println("metric", metricvalues.Labels)
 				namespaced := false
 				metkeyvalue, namespace, keys := createKeyValuePairs(metricvalues.Labels)
 				if len(namespace) > 0 {
@@ -106,7 +106,7 @@ func (p *testingProvider) populatemetrics(intconf types.Interimconfig, cfg types
 				if err != nil {
 					level.Error(intconf.Logger).Log("msg", "Err in converting labels", "Error", err.Error())
 				}
-				level.Info(intconf.Logger).Log("msg", "Labels for metric", "metricname", *mf.Name, "Labels", metricLabels, "value", getValue(m))
+				//level.Info(intconf.Logger).Log("msg", "Labels for metric", "metricname", *mf.Name, "Labels", metricLabels, "value", getValue(m))
 				info := provider.CustomMetricInfo{
 					Metric:     *mf.Name,
 					Namespaced: namespaced,
@@ -123,12 +123,12 @@ func (p *testingProvider) populatemetrics(intconf types.Interimconfig, cfg types
 					}
 
 				}
+				fmt.Println("P Values are ", p.values)
 
 			}
 		}
 
 	}
-	mfChan = make(chan *dto.MetricFamily, 1024)
 }
 
 func makeTransport(

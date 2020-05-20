@@ -17,6 +17,7 @@ limitations under the License.
 package provider
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -114,14 +115,14 @@ type testingProvider struct {
 }
 
 // NewFakeProvider returns an instance of testingProvider, along with its restful.WebService that opens endpoints to post new fake metrics
-func NewFakeProvider(client dynamic.Interface, mapper apimeta.RESTMapper, intcnf ltype.Interimconfig, cfg ltype.Cfg) (provider.MetricsProvider, *restful.WebService) {
+func NewFakeProvider(client dynamic.Interface, mapper apimeta.RESTMapper, intcnf ltype.Interimconfig) (provider.MetricsProvider, *restful.WebService) {
 	provider := &testingProvider{
 		client:          client,
 		mapper:          mapper,
 		values:          make(map[CustomMetricResource]metricValue),
 		externalMetrics: testingExternalMetrics,
 	}
-	provider.populatemetrics(intcnf, cfg)
+	provider.populatemetrics(intcnf)
 	return provider, provider.webService()
 }
 

@@ -30,10 +30,9 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
 	basecmd "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/cmd"
-	fakeprov "github.com/samuel-sujith/mwatch/pkg/provider"
 	"github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
+	fakeprov "github.com/samuel-sujith/mwatch/pkg/provider"
 )
-
 
 //SampleAdapter encasulates the apiserver base
 //Options are added to it to incorporate into metrics server
@@ -43,7 +42,8 @@ type SampleAdapter struct {
 	// Message is printed on succesful startup
 	Message string
 }
-func (a *SampleAdapter) makeProviderOrDie(intconf types.Interimconfig, configuration types.Cfg) (provider.MetricsProvider, *restful.WebService) {
+
+func (a *SampleAdapter) makeProviderOrDie(intconf types.Interimconfig) (provider.MetricsProvider, *restful.WebService) {
 	client, err := a.DynamicClient()
 	if err != nil {
 		klog.Fatalf("unable to construct dynamic client: %v", err)
@@ -54,7 +54,7 @@ func (a *SampleAdapter) makeProviderOrDie(intconf types.Interimconfig, configura
 		klog.Fatalf("unable to construct discovery REST mapper: %v", err)
 	}
 
-	return fakeprov.NewFakeProvider(client, mapper, intconf, configuration)
+	return fakeprov.NewFakeProvider(client, mapper, intconf)
 }
 
 func main() {
@@ -81,21 +81,24 @@ func main() {
 	/*cmd.Flags().AddGoFlagSet(flag.CommandLine) // make sure we get the klog flags
 	cmd.Flags().Parse(os.Args)*/
 
+	promscrapeaddress := os.Getenv("PROM_IP")
+	configurationactual := types.Cfg{Listenaddress: promscrapeaddress, DesiredMetric: "a dummy metric"}
+
 	interimconfig := types.Interimconfig{
-		Configuration: configuration,
-		Logger: logger,
-		Cert: cert,
-		Key: key,
+		Configuration:       configurationactual,
+		Logger:              logger,
+		Cert:                cert,
+		Key:                 key,
 		SkipServerCertCheck: skipServerCertCheck,
 	}
 
-	testProvider, webService := cmd.makeProviderOrDie(interimconfig, configuration)
+	testProvider, webService := cmd.makeProviderOrDie(interimconfig)
 
-	
 	cmd.WithCustomMetrics(testProvider)
 	cmd.WithExternalMetrics(testProvider)
 
 	level.Info(logger).Log("msg", cmd.Message)
+	level.Info(logger).Log("msg", "starting to listen on ", "address", promscrapeaddress)
 	// Set up POST endpoint for writing fake metric values
 	restful.DefaultContainer.Add(webService)
 	go func() {
