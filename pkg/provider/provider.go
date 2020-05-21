@@ -114,15 +114,15 @@ type testingProvider struct {
 }
 
 // NewFakeProvider returns an instance of testingProvider, along with its restful.WebService that opens endpoints to post new fake metrics
-func NewFakeProvider(client dynamic.Interface, mapper apimeta.RESTMapper, intcnf ltype.Interimconfig) (provider.MetricsProvider, *restful.WebService) {
+func NewFakeProvider(client dynamic.Interface, mapper apimeta.RESTMapper, intcnf ltype.Interimconfig) (provider.MetricsProvider, *restful.WebService, int64) {
 	provider := &testingProvider{
 		client:          client,
 		mapper:          mapper,
 		values:          make(map[CustomMetricResource]metricValue),
 		externalMetrics: testingExternalMetrics,
 	}
-	provider.populatemetrics(intcnf)
-	return provider, provider.webService()
+	noofmetricsloaded := provider.populatemetrics(intcnf)
+	return provider, provider.webService(), noofmetricsloaded
 }
 
 // webService creates a restful.WebService with routes set up for receiving fake metrics

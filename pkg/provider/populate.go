@@ -36,9 +36,11 @@ import (
 	"github.com/go-kit/kit/log/level"
 )
 
-func (p *testingProvider) populatemetrics(intconf types.Interimconfig) {
+func (p *testingProvider) populatemetrics(intconf types.Interimconfig) int64 {
 	p.valuesLock.Lock()
 	defer p.valuesLock.Unlock()
+
+	var noofmetricsloaded int64 = 0
 
 	mfChan := make(chan *dto.MetricFamily, 1024)
 
@@ -132,8 +134,9 @@ func (p *testingProvider) populatemetrics(intconf types.Interimconfig) {
 							labels: metricLabels,
 							value:  *resource.NewMilliQuantity(int64(getValue(m)*1000), resource.DecimalSI),
 						}
-						fmt.Println("Metricinfo is  ", metricInfo)
-						fmt.Println("P Values is ", p.values[metricInfo])
+						noofmetricsloaded++
+						//fmt.Println("Metricinfo is  ", metricInfo)
+						//fmt.Println("P Values is ", p.values[metricInfo])
 					}
 				}
 
@@ -141,6 +144,7 @@ func (p *testingProvider) populatemetrics(intconf types.Interimconfig) {
 		}
 
 	}
+	return noofmetricsloaded
 }
 
 func makeTransport(

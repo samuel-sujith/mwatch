@@ -14,6 +14,7 @@ limitations under the License.
 package main
 
 import (
+	"flag"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ type SampleAdapter struct {
 	Message string
 }
 
-func (a *SampleAdapter) makeProviderOrDie(intconf types.Interimconfig) (provider.MetricsProvider, *restful.WebService) {
+func (a *SampleAdapter) makeProviderOrDie(intconf types.Interimconfig) (provider.MetricsProvider, *restful.WebService, int64) {
 	client, err := a.DynamicClient()
 	if err != nil {
 		klog.Fatalf("unable to construct dynamic client: %v", err)
@@ -78,8 +79,8 @@ func main() {
 
 	cmd := &SampleAdapter{}
 	cmd.Flags().StringVar(&cmd.Message, "msg", "starting adapter...", "startup message")
-	/*cmd.Flags().AddGoFlagSet(flag.CommandLine) // make sure we get the klog flags
-	cmd.Flags().Parse(os.Args)*/
+	cmd.Flags().AddGoFlagSet(flag.CommandLine) // make sure we get the klog flags
+	cmd.Flags().Parse(os.Args)
 
 	promscrapeaddress := os.Getenv("PROM_IP")
 	configurationactual := types.Cfg{Listenaddress: promscrapeaddress, DesiredMetric: "a dummy metric"}
@@ -92,13 +93,14 @@ func main() {
 		SkipServerCertCheck: skipServerCertCheck,
 	}
 
-	testProvider, webService := cmd.makeProviderOrDie(interimconfig)
+	testProvider, webService, noofmetricsloaded := cmd.makeProviderOrDie(interimconfig)
 
 	cmd.WithCustomMetrics(testProvider)
 	cmd.WithExternalMetrics(testProvider)
 
 	level.Info(logger).Log("msg", cmd.Message)
 	level.Info(logger).Log("msg", "starting to listen on ", "address", promscrapeaddress)
+	level.Info(logger).Log("msg", "No of metrics loaded is ", "number", noofmetricsloaded)
 	// Set up POST endpoint for writing fake metric values
 	restful.DefaultContainer.Add(webService)
 	go func() {
