@@ -28,6 +28,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/samuel-sujith/mwatch/pkg/types"
 	k8s_types "k8s.io/apimachinery/pkg/types"
@@ -36,6 +37,8 @@ import (
 )
 
 func (p *testingProvider) populatemetrics(intconf types.Interimconfig) {
+	p.valuesLock.Lock()
+	defer p.valuesLock.Unlock()
 
 	mfChan := make(chan *dto.MetricFamily, 1024)
 
@@ -94,36 +97,45 @@ func (p *testingProvider) populatemetrics(intconf types.Interimconfig) {
 				metricvalues := prom2json.Metric{}
 				metricvalues = (result.Metrics[i]).(prom2json.Metric)
 				//level.Info(intconf.Logger).Log("msg", "Populating counter/gauge metric", "metricname", *mf.Name)
-				//fmt.Println("metric", metricvalues.Labels)
-				namespaced := false
-				metkeyvalue, namespace, keys := createKeyValuePairs(metricvalues.Labels)
-				if len(namespace) > 0 {
-					namespaced = true
-				}
-				//fmt.Println("metkeyvalue", metkeyvalue)
-				metkeyvalue = string(metkeyvalue[0 : len(metkeyvalue)-1])
-				metricLabels, err := labels.ConvertSelectorToLabelsMap(metkeyvalue)
-				if err != nil {
-					level.Error(intconf.Logger).Log("msg", "Err in converting labels", "Error", err.Error())
-				}
-				//level.Info(intconf.Logger).Log("msg", "Labels for metric", "metricname", *mf.Name, "Labels", metricLabels, "value", getValue(m))
-				info := provider.CustomMetricInfo{
-					Metric:     *mf.Name,
-					Namespaced: namespaced,
-				}
-
-				for k := range keys {
-					metricInfo := CustomMetricResource{
-						CustomMetricInfo: info,
-						NamespacedName:   k,
+				fmt.Println("metric", metricvalues.Labels)
+				if len(metricvalues.Labels) != 0 {
+					namespaced := false
+					metkeyvalue, namespace, keys := createKeyValuePairs(metricvalues.Labels)
+					if len(namespace) > 0 {
+						namespaced = true
 					}
-					p.values[metricInfo] = metricValue{
-						labels: metricLabels,
-						value:  *resource.NewMilliQuantity(int64(getValue(m)*1000), resource.DecimalSI),
+					//fmt.Println("metkeyvalue", metkeyvalue)
+					metkeyvalue = string(metkeyvalue[0 : len(metkeyvalue)-1])
+					metricLabels, err := labels.ConvertSelectorToLabelsMap(metkeyvalue)
+					if err != nil {
+						level.Error(intconf.Logger).Log("msg", "Err in converting labels", "Error", err.Error())
 					}
+					//level.Info(intconf.Logger).Log("msg", "Labels for metric", "metricname", *mf.Name, "Labels", metricLabels, "value", getValue(m))
+					//TODO next line -Change the type of resource
 
+					for k, value := range keys {
+
+						groupResource := schema.ParseGroupResource(value)
+						level.Info(intconf.Logger).Log("msg", "Group resource is ", "GRP RESOURCE", groupResource)
+						level.Info(intconf.Logger).Log("msg", "Value is ", "Value", value)
+
+						info := provider.CustomMetricInfo{
+							GroupResource: groupResource,
+							Metric:        *mf.Name,
+							Namespaced:    namespaced,
+						}
+						metricInfo := CustomMetricResource{
+							CustomMetricInfo: info,
+							NamespacedName:   k,
+						}
+						p.values[metricInfo] = metricValue{
+							labels: metricLabels,
+							value:  *resource.NewMilliQuantity(int64(getValue(m)*1000), resource.DecimalSI),
+						}
+						fmt.Println("Metricinfo is  ", metricInfo)
+						fmt.Println("P Values is ", p.values[metricInfo])
+					}
 				}
-				fmt.Println("P Values are ", p.values)
 
 			}
 		}
@@ -168,12 +180,12 @@ func getValue(m *dto.Metric) float64 {
 	}
 }
 
-func createKeyValuePairs(m map[string]string) (string, string, map[k8s_types.NamespacedName]int) {
+func createKeyValuePairs(m map[string]string) (string, string, map[k8s_types.NamespacedName]string) {
 	b := new(bytes.Buffer)
 	namespaced := false
 	namespace := ""
 
-	labels := make(map[k8s_types.NamespacedName]int)
+	labels := make(map[k8s_types.NamespacedName]string)
 	for key, value := range m {
 		fmt.Fprintf(b, "%s=%s,", key, value)
 		if key == "namespace" {
@@ -188,7 +200,7 @@ func createKeyValuePairs(m map[string]string) (string, string, map[k8s_types.Nam
 					Name:      key,
 					Namespace: namespace,
 				}
-				labels[namespacedName] = 1
+				labels[namespacedName] = key
 			}
 		}
 	}
