@@ -9,4 +9,6 @@ docker built -t <customname>:<tagname> .
 
 Once the image is built, substitute into your manifests.
 
+Create your own secrets in the namespace where you deploy the manifests. Name of secret is cm-adapter-serving-certs.
+
 Please post issues in case of any assistance.
