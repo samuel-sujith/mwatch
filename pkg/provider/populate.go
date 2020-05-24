@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
@@ -100,24 +101,29 @@ func (p *testingProvider) populatemetrics(intconf types.Interimconfig) int64 {
 				metricvalues = (result.Metrics[i]).(prom2json.Metric)
 				//level.Info(intconf.Logger).Log("msg", "Populating counter/gauge metric", "metricname", *mf.Name)
 				fmt.Println("metric", metricvalues.Labels)
+				fmt.Println("Length of metric map", len(metricvalues.Labels))
 				if len(metricvalues.Labels) != 0 {
 					namespaced := false
-					metkeyvalue, namespace, keys := createKeyValuePairs(metricvalues.Labels)
+					metkeyvalue, namespace := createKeyValuePairs(metricvalues.Labels)
 					if len(namespace) > 0 {
 						namespaced = true
 					}
-					//fmt.Println("metkeyvalue", metkeyvalue)
+					fmt.Println("metkeyvalue", metkeyvalue)
 					metkeyvalue = string(metkeyvalue[0 : len(metkeyvalue)-1])
 					metricLabels, err := labels.ConvertSelectorToLabelsMap(metkeyvalue)
 					if err != nil {
 						level.Error(intconf.Logger).Log("msg", "Err in converting labels", "Error", err.Error())
+						fmt.Println("Metriclabels in  is  ", metricLabels)
 					}
+					fmt.Println("Metriclabels out is  ", metricLabels)
 					//level.Info(intconf.Logger).Log("msg", "Labels for metric", "metricname", *mf.Name, "Labels", metricLabels, "value", getValue(m))
 					//TODO next line -Change the type of resource
 
-					for k, value := range keys {
+					keys, namespacedname := convertomap(metricLabels)
 
-						groupResource := schema.ParseGroupResource(value)
+					for key, value := range keys {
+
+						groupResource := schema.ParseGroupResource(key)
 						level.Info(intconf.Logger).Log("msg", "Group resource is ", "GRP RESOURCE", groupResource)
 						level.Info(intconf.Logger).Log("msg", "Value is ", "Value", value)
 
@@ -126,17 +132,27 @@ func (p *testingProvider) populatemetrics(intconf types.Interimconfig) int64 {
 							Metric:        *mf.Name,
 							Namespaced:    namespaced,
 						}
-						metricInfo := CustomMetricResource{
-							CustomMetricInfo: info,
-							NamespacedName:   k,
+
+						info, _, err = info.Normalized(p.mapper)
+						if err != nil {
+							level.Error(intconf.Logger).Log("msg", "Error in normalizing", "err", err)
 						}
-						p.values[metricInfo] = metricValue{
-							labels: metricLabels,
-							value:  *resource.NewMilliQuantity(int64(getValue(m)*1000), resource.DecimalSI),
+						if err == nil {
+							tmplabel := convertoset(key, value)
+
+							metricInfo := CustomMetricResource{
+								CustomMetricInfo: info,
+								NamespacedName:   namespacedname,
+							}
+							p.values[metricInfo] = metricValue{
+								labels: tmplabel,
+								value:  *resource.NewMilliQuantity(int64(getValue(m)*1000), resource.DecimalSI),
+							}
+							noofmetricsloaded++
+							fmt.Println("Metricinfo is  ", metricInfo)
+							fmt.Println("P Values is ", p.values[metricInfo])
 						}
-						noofmetricsloaded++
-						//fmt.Println("Metricinfo is  ", metricInfo)
-						//fmt.Println("P Values is ", p.values[metricInfo])
+
 					}
 				}
 
@@ -184,29 +200,67 @@ func getValue(m *dto.Metric) float64 {
 	}
 }
 
-func createKeyValuePairs(m map[string]string) (string, string, map[k8s_types.NamespacedName]string) {
+func createKeyValuePairs(m map[string]string) (string, string) {
 	b := new(bytes.Buffer)
-	namespaced := false
 	namespace := ""
 
-	labels := make(map[k8s_types.NamespacedName]string)
 	for key, value := range m {
 		fmt.Fprintf(b, "%s=%s,", key, value)
 		if key == "namespace" {
 			namespace = value
-			namespaced = true
 		}
 	}
-	for key := range m {
-		if namespaced {
-			if key != "namespace" {
-				namespacedName := k8s_types.NamespacedName{
-					Name:      key,
-					Namespace: namespace,
-				}
-				labels[namespacedName] = key
+	return b.String(), namespace
+}
+
+func createKeys(m string) map[string]string {
+
+	labels := strings.Split(m, ",")
+
+	returnmap := make(map[string]string)
+
+	for _, label := range labels {
+		temp := strings.Split(label, "=")
+		key := strings.TrimSpace(temp[0])
+		value := strings.TrimSpace(temp[1])
+		returnmap[key] = value
+	}
+
+	return returnmap
+}
+
+func convertomap(m labels.Set) (map[string]string, k8s_types.NamespacedName) {
+
+	returnmap := make(map[string]string)
+	gotnamespace := false
+
+	var namespacedName k8s_types.NamespacedName
+
+	for key, value := range m {
+		returnmap[key] = value
+		if key == "namespace" {
+			namespacedName = k8s_types.NamespacedName{
+				Name:      "sample-adapter",
+				Namespace: value,
 			}
+			gotnamespace = true
 		}
 	}
-	return b.String(), namespace, labels
+
+	if !gotnamespace {
+		namespacedName = k8s_types.NamespacedName{
+			Name: "sample-adapter",
+		}
+	}
+
+	return returnmap, namespacedName
+}
+
+func convertoset(key string, value string) labels.Set {
+
+	returnset := labels.Set{}
+
+	returnset[key] = value
+
+	return returnset
 }
